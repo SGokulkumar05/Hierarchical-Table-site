@@ -7,7 +7,7 @@ const calculateVariance = (newValue, originalValue) => {
   return ((newValue - originalValue) / originalValue) * 100;
 };
 
-// Recursive function to update subtotals
+// Recursive function to update subtotals (without overriding initial values)
 const updateSubtotals = (rows) => {
   return rows.map((row) => {
     if (row.children) {
@@ -46,9 +46,39 @@ const distributeSubtotal = (row, newValue) => {
   return { ...row, value: newValue };
 };
 
+// Recursive function to calculate grand total from leaf nodes
+const calculateGrandTotal = (rows) => {
+  let total = 0;
+  const traverse = (rows) => {
+    rows.forEach((row) => {
+      if (row.children) {
+        traverse(row.children); // Traverse children if present
+      } else {
+        total += row.value; // Add value if it's a leaf node
+      }
+    });
+  };
+  traverse(rows);
+  return total;
+};
+
 // Main App Component
 const App = () => {
   const [data, setData] = useState(initialData);
+  const [initialValues, setInitialValues] = useState({}); // Store initial values for variance calculation
+
+  // Store initial values for variance calculation
+  useEffect(() => {
+    const initialValuesMap = {};
+    const traverse = (rows) => {
+      rows.forEach((row) => {
+        initialValuesMap[row.id] = row.value; // Store the initial value
+        if (row.children) traverse(row.children);
+      });
+    };
+    traverse(initialData.rows); // Use initialData.rows to preserve initial values
+    setInitialValues(initialValuesMap);
+  }, []);
 
   // Update subtotals whenever data changes
   useEffect(() => {
@@ -62,6 +92,10 @@ const App = () => {
       alert("Please enter a valid non-negative percentage.");
       return;
     }
+    if (percentage === 0) {
+      alert("A 0% increase will not change the value.");
+      return;
+    }
     const updatedRows = data.rows.map((row) =>
       updateRow(row, id, (value) => value * (1 + percentage / 100))
     );
@@ -73,6 +107,12 @@ const App = () => {
     if (isNaN(newValue) || newValue < 0) {
       alert("Please enter a valid non-negative value.");
       return;
+    }
+    if (newValue === 0) {
+      const confirmZero = window.confirm(
+        "Are you sure you want to set this value to 0?"
+      );
+      if (!confirmZero) return;
     }
     const updatedRows = data.rows.map((row) =>
       updateRow(row, id, () => newValue)
@@ -129,15 +169,21 @@ const App = () => {
               Allocation Val
             </button>
           </td>
-          <td>{calculateVariance(row.value, row.originalValue).toFixed(2)}%</td>
+          <td>
+            {calculateVariance(
+              row.value,
+              initialValues[row.id] || row.value
+            ).toFixed(2)}
+            %
+          </td>
         </tr>
         {row.children && renderRows(row.children, level + 1)}
       </React.Fragment>
     ));
   };
 
-  // Calculate Grand Total
-  const grandTotal = data.rows.reduce((sum, row) => sum + row.value, 0);
+  // Calculate Grand Total from leaf nodes
+  const grandTotal = calculateGrandTotal(data.rows);
 
   return (
     <div>
